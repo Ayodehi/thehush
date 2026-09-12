@@ -9,7 +9,6 @@
 license="${mod_license}"
 
 # A URL to refer people to when problems occur with this mod
-#issueTrackerURL="https://change.me.to.your.issue.tracker.example.invalid/" #optional
 
 # A list of mods - how many allowed here is determined by the individual mod loader
 [[mods]] #mandatory
@@ -27,20 +26,24 @@ displayName="${mod_name}" #mandatory
 #updateJSONURL="https://change.me.example.invalid/updates.json" #optional
 
 # A URL for the "homepage" for this mod, displayed in the mod UI
-#displayURL="https://change.me.to.your.mods.homepage.example.invalid/" #optional
 
 # A file name (in the root of the mod JAR) containing a logo for display
-#logoFile="examplemod.png" #optional
 
 # A text field displayed in the mod UI
 #credits="" #optional
 
 # The authors of the mod, displayed in the mod UI (optional)
-authors="Ben Barbour"
-
-# The description text for the mod (multi line!) (#mandatory)
+authors="Ayodehi"
+displayURL="https://github.com/Ayodehi/thehush"
+issueTrackerURL="https://github.com/Ayodehi/thehush/issues"
+iconFile="thehush_logo.png"
+iconBlur=false
 description='''
-The Hush: a mysterious Traveller who talks through Claude, remembers you, and guides you down a road that ends in the dark. Villagers you can actually talk to.
+A stranger arrives in your village the morning after a storm. He talks, he remembers, he will not say where he came from, and he knows the road ahead: iron, the stronghold, the End, and then somewhere under the Deep Dark that nothing has come back from.
+
+The Traveller speaks through a language model of your choosing (Claude, a local model through Ollama, or any OpenAI-compatible server) and can be heard aloud through ElevenLabs or a local voice such as Kokoro. He watches what you do, keeps notes on you between sessions, follows, leads, and points the way. Kill him and he returns, a little less himself each time.
+
+A story campaign with its own creatures, clues left in the world, and things heard in the dark that are never seen. Needs an API key or a local model; see the README.
 '''
 
 # The [[mixins]] block allows you to declare your mixin config to FML so that it gets loaded.
