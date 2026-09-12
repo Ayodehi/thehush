@@ -18,6 +18,8 @@ import org.jspecify.annotations.Nullable;
 
 import java.util.List;
 import java.util.Map;
+import java.util.ArrayDeque;
+import java.util.HashMap;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -68,6 +70,8 @@ public final class ConversationManager {
     }
 
     public void endSession(UUID playerId) {
+        pending.values().forEach(q -> q.removeIf(pd -> pd.player().equals(playerId)));
+        pending.values().removeIf(ArrayDeque::isEmpty);
         sessions.remove(playerId);
     }
 
@@ -172,7 +176,16 @@ public final class ConversationManager {
      * of earshot): the session quietly lapses and the line goes out as ordinary chat, with no notice; the
      * silence is the answer.
      */
+    /** A player's line that arrived while he was mid-thought; answered the moment he is free. */
+    private record Pending(UUID player, String text) {}
+
+    private final Map<UUID, ArrayDeque<Pending>> pending = new HashMap<>();
+
     private boolean deliver(ServerPlayer player, String text, @Nullable AiVillagerEntity villager) {
+        return deliver(player, text, villager, true);
+    }
+
+    private boolean deliver(ServerPlayer player, String text, @Nullable AiVillagerEntity villager, boolean echo) {
         if (villager == null) {
             sessions.remove(player.getUUID());
             return false;
@@ -185,7 +198,7 @@ public final class ConversationManager {
         }
 
         // Echo the player's line so nearby players still see it (normal chat was cancelled).
-        broadcastNear(villager, Component.literal("<" + player.getName().getString() + "> ")
+        if (echo) broadcastNear(villager, Component.literal("<" + player.getName().getString() + "> ")
                 .append(Component.literal(text).withStyle(ChatFormatting.ITALIC)));
 
         villager.setTalkingTo(player);
@@ -201,7 +214,9 @@ public final class ConversationManager {
             return true;
         }
         if (engine.isBusy()) {
-            player.sendSystemMessage(Component.literal(villager.speakerName() + " is still thinking...")
+            // Mid-thought (often an unprompted remark): keep the line and answer it when this exchange ends.
+            pending.computeIfAbsent(villager.getUUID(), k -> new ArrayDeque<>()).addLast(new Pending(player.getUUID(), text));
+            player.sendSystemMessage(Component.literal(villager.speakerName() + " is still thinking; he heard you...")
                     .withStyle(ChatFormatting.GRAY), true);
             return true;
         }
@@ -226,8 +241,22 @@ public final class ConversationManager {
                 else live.drainLocated();
                 keepHisWord(live, player, text);
             }
+            answerPending(server, live);
         }));
         return true;
+    }
+
+    /** He has finished a thought: if someone spoke to him meanwhile, that comes next. Several lines from one player are joined. */
+    private void answerPending(MinecraftServer server, AiVillagerEntity live) {
+        ArrayDeque<Pending> q = pending.get(live.getUUID());
+        if (q == null || q.isEmpty()) return;
+        Pending first = q.pollFirst();
+        StringBuilder text = new StringBuilder(first.text());
+        while (!q.isEmpty() && q.peekFirst().player().equals(first.player())) text.append('\n').append(q.pollFirst().text());
+        if (q.isEmpty()) pending.remove(live.getUUID());
+        ServerPlayer player = server.getPlayerList().getPlayer(first.player());
+        if (player == null || !live.isAlive()) return;
+        deliver(player, text.toString(), live, false);
     }
 
     /**
@@ -252,6 +281,7 @@ public final class ConversationManager {
     public void remark(AiVillagerEntity villager, ServerPlayer audience, String event) {
         ConversationEngine engine = villager.engine();
         if (engine == null || engine.isBusy()) return;
+        if (pending.containsKey(villager.getUUID())) return; // someone is waiting on him; the world can wait
         if (com.ayodehi.thehush.voice.VoiceService.get().isSpeaking(villager)) return; // not over his own voice
         MinecraftServer server = villager.level().getServer();
         if (server == null) return;
@@ -259,16 +289,15 @@ public final class ConversationManager {
         String prompt = "[world] " + event + " (If this is worth a word from you, say one short line in character"
                 + " to " + CampaignManager.get().displayName(villager, audience) + "; otherwise reply with only ... to stay silent.)";
         engine.respond(villager.systemPrompt(), prompt).whenComplete((reply, error) -> server.execute(() -> {
+            AiVillagerEntity live = villager.current();
             if (error != null) {
                 TheHushMod.LOGGER.debug("ambient remark failed for {}", villager.speakerName(), error);
-                return;
-            }
-            AiVillagerEntity live = villager.current();
-            if (live.isAlive() && !isSilence(reply)) {
+            } else if (live.isAlive() && !isSilence(reply)) {
                 if (live != villager) live.adoptHistory(engine);
                 speak(live, reply);
                 live.drainLocated(); // unprompted remarks never come with numbers
             }
+            answerPending(server, live);
         }));
     }
 

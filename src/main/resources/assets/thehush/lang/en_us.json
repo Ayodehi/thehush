@@ -56,5 +56,17 @@
   "item.thehush.unsaid_spawn_egg": "Unsaid Spawn Egg",
   "thehush.configuration.unsaid": "The Unsaid rise in soul sand valleys",
   "thehush.configuration.unsaidRarity": "Unsaid rarity (higher is rarer)",
-  "block.thehush.dark_soul_lantern": "Dark Soul Lantern"
+  "block.thehush.dark_soul_lantern": "Dark Soul Lantern",
+  "thehush.configuration.voice.apiKey": "ElevenLabs API key",
+  "thehush.configuration.voice.apiKey.tooltip": "Your ElevenLabs API key. Saved to config/thehush-common.toml. Leave empty to use the environment variable instead. The key needs Text to Speech access; give it User access too for the credit report.",
+  "thehush.configuration.voice.apiKeyEnvVar": "ElevenLabs key environment variable",
+  "thehush.configuration.voice.apiKeyEnvVar.tooltip": "Read the ElevenLabs key from this environment variable when the field above is empty.",
+  "thehush.configuration.voice.model": "ElevenLabs model",
+  "thehush.configuration.voice.model.tooltip": "eleven_v3_conversational: expressive, fast, reads [cues]. eleven_v3: most expressive, slower. eleven_multilingual_v2: lifelike, no cues. eleven_flash_v2_5: fastest, half the credits.",
+  "thehush.configuration.lineGapSeconds": "Gap between spoken lines",
+  "thehush.configuration.lineGapSeconds.tooltip": "Seconds of silence between one spoken line ending and the next beginning. Lines never overlap.",
+  "thehush.configuration.unseen": "Unseen sounds",
+  "thehush.configuration.unseen.tooltip": "Things heard and not seen, for players alone in the dark: footsteps behind you, a heartbeat under the sculk, a breath of silence, a knock, something below, the bell at night.",
+  "thehush.configuration.unseenMinutes": "Minutes between unseen sounds",
+  "thehush.configuration.unseenMinutes.tooltip": "About this long between them for a player alone in the dark; shorter as the road goes on."
 }

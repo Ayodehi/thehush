@@ -43,6 +43,19 @@ public final class VoiceService {
 
     private @Nullable VoiceProvider provider;
     private @Nullable ExecutorService executor;
+    /** Why he is silent right now, and until when (epoch millis); null when the voice is working. */
+    private volatile @Nullable Outage outage;
+    private volatile VoiceProvider.@Nullable Credits credits;
+    private static final long AUTH_HOLD_MILLIS = 30 * 60_000L;
+    private static final long QUOTA_HOLD_MILLIS = 30 * 60_000L;
+    private static final long RATE_HOLD_MILLIS = 20_000L;
+
+    /** A stretch of enforced silence: what happened, what to tell people, and when to try again. */
+    private record Outage(VoiceException.Kind kind, String message, long untilMillis) {
+        boolean active() {
+            return System.currentTimeMillis() < untilMillis;
+        }
+    }
     private final AtomicInteger utterances = new AtomicInteger();
     /** Server thread only: what each speaker has yet to say, in order, and when they fall silent. */
     private final Map<UUID, Queue> queues = new HashMap<>();
@@ -79,6 +92,8 @@ public final class VoiceService {
 
     public synchronized void configure() {
         provider = null;
+        outage = null;
+        credits = null;
         String kind = Config.VOICE_PROVIDER.get().trim().toLowerCase();
         if (kind.isEmpty() || kind.equals("none")) return;
         String key = Config.VOICE_API_KEY.get().trim();
@@ -94,6 +109,7 @@ public final class VoiceService {
         if (kind.equals("elevenlabs")) {
             provider = new ElevenLabsVoice(new ElevenLabsVoice.Settings(key, Config.VOICE_ID.get(), Config.VOICE_MODEL.get(),
                     Config.VOICE_STABILITY.get(), Config.VOICE_SIMILARITY.get(), Config.VOICE_TIMEOUT_SECONDS.get()), executor);
+            refreshCredits(null);
         } else {
             TheHushMod.LOGGER.warn("Unknown voice.provider '{}'; he stays silent", kind);
         }
@@ -101,6 +117,7 @@ public final class VoiceService {
 
     public synchronized void shutdown() {
         provider = null;
+        outage = null;
         queues.clear();
         if (executor != null) {
             executor.shutdownNow();
@@ -113,7 +130,126 @@ public final class VoiceService {
     }
 
     public synchronized String describe() {
-        return provider == null ? "none" : provider.describe();
+        if (provider == null) return "none";
+        Outage o = outage;
+        String base = provider.describe();
+        if (o != null && o.active()) return base + " [SILENT: " + o.message + "]";
+        VoiceProvider.Credits c = credits;
+        return c == null || c.limit() <= 0 ? base : base + " [" + c.remaining() + " of " + c.limit() + " characters left]";
+    }
+
+    /** One line about the account's credit for /hush usage, or empty when the engine cannot say. */
+    public String creditsLine() {
+        VoiceProvider.Credits c = credits;
+        if (c == null || c.limit() <= 0) return "";
+        String tier = c.tier().isEmpty() ? "" : " (" + c.tier() + ")";
+        String reset = c.resetEpochSeconds() > 0 ? ", resets " + when(c.resetEpochSeconds() * 1000L) : "";
+        Outage o = outage;
+        String state = o != null && o.active() && o.kind() == VoiceException.Kind.QUOTA ? "; he is silent until then" : "";
+        return "Voice credits" + tier + ": " + c.used() + " of " + c.limit() + " characters used, " + c.remaining() + " left" + reset + state + ".";
+    }
+
+    /** Ask the engine what is left; on a quota outage the reset time is taken from the answer. */
+    private void refreshCredits(@Nullable MinecraftServer server) {
+        VoiceProvider p = provider;
+        if (p == null) return;
+        p.credits().whenComplete((c, error) -> {
+            if (error != null || c == null) {
+                Throwable cause = error != null && error.getCause() != null ? error.getCause() : error;
+                String why = cause == null ? "empty answer" : cause.getMessage();
+                if (why != null && why.contains("missing_permissions")) {
+                    TheHushMod.LOGGER.info("Voice credits cannot be read: the ElevenLabs API key lacks the 'user_read' permission. "
+                            + "Speech still works; grant User: Read on the key at elevenlabs.io to see credits in /hush usage and get early warning when they run out.");
+                } else {
+                    TheHushMod.LOGGER.info("Voice credits cannot be read: {}", why);
+                }
+                return;
+            }
+            credits = c;
+            TheHushMod.LOGGER.info("Voice credits: {} of {} characters used{}", c.used(), c.limit(),
+                    c.resetEpochSeconds() > 0 ? ", reset " + when(c.resetEpochSeconds() * 1000L) : "");
+            Outage o = outage;
+            if (c.exhausted() && (o == null || !o.active())) {
+                // Out before the first line was even asked for: say so now rather than on the first failure.
+                Outage fresh = new Outage(VoiceException.Kind.QUOTA, quotaMessage(c), holdUntil(c));
+                outage = fresh;
+                if (server != null) server.execute(() -> announce(server, fresh));
+                else TheHushMod.LOGGER.warn("He is silent: {}", fresh.message());
+            } else if (o != null && o.kind() == VoiceException.Kind.QUOTA && c.resetEpochSeconds() > 0) {
+                outage = new Outage(o.kind(), quotaMessage(c), holdUntil(c));
+            }
+        });
+    }
+
+    private static long holdUntil(VoiceProvider.Credits c) {
+        long now = System.currentTimeMillis();
+        return c.resetEpochSeconds() > 0 ? Math.max(now + 60_000L, c.resetEpochSeconds() * 1000L) : now + QUOTA_HOLD_MILLIS;
+    }
+
+    private static String quotaMessage(VoiceProvider.Credits c) {
+        String reset = c.resetEpochSeconds() > 0 ? "; they reset " + when(c.resetEpochSeconds() * 1000L) : "";
+        return "ElevenLabs credits are used up (" + c.used() + " of " + c.limit() + " characters" + reset + ")";
+    }
+
+    private static String when(long epochMillis) {
+        return java.time.format.DateTimeFormatter.ofPattern("d MMM HH:mm").withZone(java.time.ZoneId.systemDefault())
+                .format(java.time.Instant.ofEpochMilli(epochMillis));
+    }
+
+    /**
+     * A failed line: decide whether to keep trying. Quota and key problems silence him for a while and are
+     * announced once; rate limits pause briefly and quietly; anything else is just logged.
+     */
+    private void onFailure(MinecraftServer server, AiVillagerEntity speaker, Throwable error) {
+        Throwable cause = error.getCause() != null ? error.getCause() : error;
+        VoiceException ve = cause instanceof VoiceException v ? v : null;
+        VoiceException.Kind kind = ve != null ? ve.kind() : VoiceException.Kind.OTHER;
+        long now = System.currentTimeMillis();
+        Outage o = outage;
+        switch (kind) {
+            case QUOTA -> {
+                if (o != null && o.active() && o.kind() == kind) return;
+                VoiceProvider.Credits c = credits;
+                long until = ve.resetEpochSeconds() > 0 ? Math.max(now + 60_000L, ve.resetEpochSeconds() * 1000L)
+                        : c != null && c.resetEpochSeconds() > 0 ? holdUntil(c) : now + QUOTA_HOLD_MILLIS;
+                String msg = c != null && c.limit() > 0 ? quotaMessage(c) : "ElevenLabs credits are used up (" + ve.getMessage() + ")";
+                Outage fresh = new Outage(kind, msg, until);
+                outage = fresh;
+                announce(server, fresh);
+                refreshCredits(server); // learn the reset time and the exact numbers
+            }
+            case AUTH -> {
+                if (o != null && o.active() && o.kind() == kind) return;
+                Outage fresh = new Outage(kind, "ElevenLabs rejected the API key (" + cause.getMessage()
+                        + "). Check voice.apiKey in config/thehush-common.toml; saving it puts his voice back", now + AUTH_HOLD_MILLIS);
+                outage = fresh;
+                announce(server, fresh);
+            }
+            case VOICE -> {
+                if (o != null && o.active() && o.kind() == kind) return;
+                Outage fresh = new Outage(kind, "ElevenLabs does not know this voice or model (" + cause.getMessage()
+                        + "). Check voice.voiceId and voice.model", now + AUTH_HOLD_MILLIS);
+                outage = fresh;
+                announce(server, fresh);
+            }
+            case RATE_LIMIT -> {
+                outage = new Outage(kind, "ElevenLabs is busy (" + cause.getMessage() + ")", now + RATE_HOLD_MILLIS);
+                TheHushMod.LOGGER.warn("Voice paused for {}: {}", speaker.speakerName(), cause.toString());
+            }
+            default -> TheHushMod.LOGGER.warn("Voice failed for {}: {}", speaker.speakerName(), cause.toString());
+        }
+    }
+
+    /** Tell the people who can do something: operators, and everyone in a single-player or LAN world. */
+    private static void announce(MinecraftServer server, Outage o) {
+        TheHushMod.LOGGER.warn("He is silent: {}", o.message());
+        String text = "The voice has gone: " + o.message() + ". Lines arrive as text only until then.";
+        for (ServerPlayer p : server.getPlayerList().getPlayers()) {
+            if (!server.isDedicatedServer() || server.getPlayerList().isOp(p.nameAndId())) {
+                p.sendSystemMessage(net.minecraft.network.chat.Component.literal(text)
+                        .withStyle(net.minecraft.ChatFormatting.GRAY, net.minecraft.ChatFormatting.ITALIC));
+            }
+        }
     }
 
     /** True when the engine will act on bracketed delivery cues, so the persona is told it may write them. */
@@ -133,6 +269,15 @@ public final class VoiceService {
         MinecraftServer server = speaker.level().getServer();
         if (p == null || server == null) {
             showText.run();
+            return;
+        }
+        Outage o = outage;
+        if (o != null && o.active()) {
+            // Silent for a known reason: the text goes out at once, in order with anything still queued.
+            Utterance u = new Utterance(speaker, showText, "", Speech.Manner.PLAIN);
+            u.done = true;
+            queues.computeIfAbsent(speaker.getUUID(), k -> new Queue()).lines.addLast(u);
+            tick();
             return;
         }
         // Cues from the world: he whispers on sculk ground, and calls out when the one he talks to is far off.
@@ -184,11 +329,13 @@ public final class VoiceService {
     /** Show the text and start the sound; returns how long the line will take to hear. */
     private long dispatch(Utterance u) {
         u.showText.run();
+        if (u.text.isEmpty()) return 0; // a text-only line during an outage: no pacing needed
         Throwable error = u.error;
         VoiceProvider.Audio a = u.audio;
         if (error != null || a == null) {
-            Throwable cause = error != null && error.getCause() != null ? error.getCause() : error;
-            TheHushMod.LOGGER.warn("Voice failed for {}: {}", u.speaker.speakerName(), cause == null ? "no audio" : cause.toString());
+            MinecraftServer server = u.speaker.level().getServer();
+            if (error != null && server != null) onFailure(server, u.speaker, error);
+            else TheHushMod.LOGGER.warn("Voice failed for {}: no audio", u.speaker.speakerName());
             return Math.min(MAX_TEXT_ONLY_MILLIS, u.text.length() * MILLIS_PER_CHAR);
         }
         UsageMeter.get().recordVoice(u.text.length(), Config.VOICE_PRICE_PER_THOUSAND.get());

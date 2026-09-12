@@ -298,6 +298,8 @@ public final class TheHushCommands {
                 .append(Component.literal("  " + LlmService.get().describe()).withStyle(net.minecraft.ChatFormatting.GRAY));
         out.append(usageBlock("This session", meter.session()));
         out.append(usageBlock("Whole campaign", meter.campaign()));
+        String credits = com.ayodehi.thehush.voice.VoiceService.get().creditsLine();
+        if (!credits.isEmpty()) out.append(Component.literal("\n" + credits).withStyle(net.minecraft.ChatFormatting.AQUA));
         out.append(Component.literal("\nEstimated from list prices; set llm.inputPricePerMTok / outputPricePerMTok if yours differ.")
                 .withStyle(net.minecraft.ChatFormatting.DARK_GRAY, net.minecraft.ChatFormatting.ITALIC));
         ctx.getSource().sendSuccess(() -> out, false);

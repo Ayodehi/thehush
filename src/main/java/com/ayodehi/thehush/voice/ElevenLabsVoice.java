@@ -1,6 +1,8 @@
 package com.ayodehi.thehush.voice;
 
+import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -118,8 +120,71 @@ public final class ElevenLabsVoice implements VoiceProvider {
                 String lower = detail.toLowerCase();
                 if (lower.contains("output_format") || lower.contains("pcm")) throw new RateRefused("ElevenLabs " + resp.statusCode() + ": " + detail);
             }
-            throw new IOException("ElevenLabs " + resp.statusCode() + ": " + detail);
+            throw classify(resp.statusCode(), detail);
         }
         return new Audio(resp.body(), rate);
+    }
+
+    /**
+     * ElevenLabs answers errors with {"detail": {"status": "...", "message": "..."}}. The statuses that
+     * matter: quota_exceeded (no characters left), invalid_api_key / missing_permissions /
+     * detected_unusual_activity (the key), too_many_concurrent_requests / system_busy (later), voice_not_found.
+     */
+    static VoiceException classify(int code, String body) {
+        String status = "";
+        String message = body;
+        try {
+            JsonElement root = JsonParser.parseString(body);
+            if (root.isJsonObject() && root.getAsJsonObject().has("detail")) {
+                JsonElement d = root.getAsJsonObject().get("detail");
+                if (d.isJsonObject()) {
+                    JsonObject o = d.getAsJsonObject();
+                    if (o.has("status")) status = o.get("status").getAsString();
+                    if (o.has("message")) message = o.get("message").getAsString();
+                } else if (d.isJsonPrimitive()) {
+                    message = d.getAsString();
+                }
+            }
+        } catch (RuntimeException ignored) {
+            // not JSON; keep the raw body
+        }
+        String lower = (status + " " + message).toLowerCase();
+        VoiceException.Kind kind;
+        if (status.equals("quota_exceeded") || lower.contains("quota") || lower.contains("credits remaining") || code == 402) kind = VoiceException.Kind.QUOTA;
+        else if (code == 429 || status.contains("too_many") || status.equals("system_busy")) kind = VoiceException.Kind.RATE_LIMIT;
+        else if (code == 401 || code == 403 || status.contains("api_key") || status.contains("permission") || status.contains("unusual_activity")) kind = VoiceException.Kind.AUTH;
+        else if (status.contains("voice") || status.contains("model")) kind = VoiceException.Kind.VOICE;
+        else kind = VoiceException.Kind.OTHER;
+        String shown = status.isEmpty() ? message : status + ": " + message;
+        return new VoiceException(kind, "ElevenLabs " + code + " (" + shown + ")");
+    }
+
+    /** GET /v1/user/subscription: character_count, character_limit, next_character_count_reset_unix, tier. */
+    @Override
+    public CompletableFuture<Credits> credits() {
+        return CompletableFuture.supplyAsync(() -> {
+            HttpRequest req = HttpRequest.newBuilder(URI.create("https://api.elevenlabs.io/v1/user/subscription"))
+                    .timeout(Duration.ofSeconds(settings.timeoutSeconds()))
+                    .header("xi-api-key", settings.apiKey())
+                    .header("Accept", "application/json")
+                    .GET().build();
+            HttpResponse<String> resp;
+            try {
+                resp = http.send(req, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+            } catch (IOException e) {
+                throw new VoiceException(VoiceException.Kind.OTHER, "ElevenLabs subscription: " + e.getMessage());
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new VoiceException(VoiceException.Kind.OTHER, "interrupted");
+            }
+            if (resp.statusCode() / 100 != 2) throw classify(resp.statusCode(), resp.body());
+            JsonObject o = JsonParser.parseString(resp.body()).getAsJsonObject();
+            long used = o.has("character_count") ? o.get("character_count").getAsLong() : 0;
+            long limit = o.has("character_limit") ? o.get("character_limit").getAsLong() : 0;
+            long reset = o.has("next_character_count_reset_unix") && !o.get("next_character_count_reset_unix").isJsonNull()
+                    ? o.get("next_character_count_reset_unix").getAsLong() : -1;
+            String tier = o.has("tier") && !o.get("tier").isJsonNull() ? o.get("tier").getAsString() : "";
+            return new Credits(used, limit, reset, tier);
+        }, executor);
     }
 }

@@ -100,9 +100,12 @@ public final class Config {
 
     public static final ModConfigSpec.ConfigValue<String> VOICE_API_KEY = BUILDER
             .comment("ElevenLabs API key. Leave empty to read it from the environment variable named in apiKeyEnvVar.")
+            .translation("thehush.configuration.voice.apiKey")
             .define("apiKey", "");
 
     public static final ModConfigSpec.ConfigValue<String> VOICE_API_KEY_ENV_VAR = BUILDER
+            .comment("Environment variable to read the ElevenLabs key from when apiKey is empty.")
+            .translation("thehush.configuration.voice.apiKeyEnvVar")
             .define("apiKeyEnvVar", "ELEVENLABS_API_KEY");
 
     public static final ModConfigSpec.ConfigValue<String> VOICE_ID = BUILDER
@@ -110,7 +113,9 @@ public final class Config {
             .define("voiceId", "JBFqnCBsd6RMkjVDRZzb");
 
     public static final ModConfigSpec.ConfigValue<String> VOICE_MODEL = BUILDER
-            .comment("ElevenLabs model: eleven_multilingual_v2 (best), eleven_flash_v2_5 (fastest, half the credits), eleven_turbo_v2_5.")
+            .comment("ElevenLabs model: eleven_v3_conversational (expressive, fast, reads [cues]), eleven_v3 (most expressive, slower),",
+                    "eleven_multilingual_v2 (lifelike, no cues), eleven_flash_v2_5 (fastest, half the credits).")
+            .translation("thehush.configuration.voice.model")
             .define("model", "eleven_multilingual_v2");
 
     public static final ModConfigSpec.DoubleValue VOICE_STABILITY = BUILDER
