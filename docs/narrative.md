@@ -1,6 +1,6 @@
 # The Hush
 
-*A narrative campaign for Villager AI. The Traveller, the road he keeps, and the thing that listens at the end of it.*
+*The Traveller, the road he keeps, and the thing that listens at the end of it.*
 
 ---
 

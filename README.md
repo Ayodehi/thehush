@@ -1,8 +1,9 @@
-# Villager AI
+# The Hush
 
-A NeoForge mod for Minecraft 26.2 that adds a **Talking Villager**: right-click it and chat with it in
-plain language. It answers through Claude, can look at the world through a set of tools, and remembers
-your conversation across sessions.
+A NeoForge mod for Minecraft 26.2. A stranger arrives in your village the morning after a storm: **the
+Traveller**, a villager who talks. Walk up and speak to him in plain language; he answers through Claude,
+can look at the world through a set of tools, remembers you across sessions, and guides you down a road
+that ends somewhere under the Deep Dark. Everything he tells you is true. Almost none of it is the truth.
 
 ## How it plays
 
@@ -37,7 +38,7 @@ hints, his sayings, and a few jokes); NeoForge merges them into the vanilla pool
 
 ## Setup
 
-Requires an Anthropic API key. The easiest way is in game: main menu (or pause menu) > Mods > Villager AI >
+Requires an Anthropic API key. The easiest way is in game: main menu (or pause menu) > Mods > The Hush >
 Config > Language model > API key. Saving the screen applies the key immediately, no restart needed.
 Alternatively export `ANTHROPIC_API_KEY` in the environment that launches the game/server, or edit
 `config/thehush-common.toml` under `llm.apiKey` (then run `/hush reload`).
