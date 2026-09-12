@@ -2,206 +2,174 @@
 
 A NeoForge mod for Minecraft 26.2. A stranger arrives in your village the morning after a storm: **the
 Traveller**, a villager who talks. Walk up and speak to him in plain language; he answers through Claude,
-can look at the world through a set of tools, remembers you across sessions, and guides you down a road
-that ends somewhere under the Deep Dark. Everything he tells you is true. Almost none of it is the truth.
+can look at the world, remembers you across sessions, and guides you down a road that ends somewhere under
+the Deep Dark. Everything he tells you is true. Almost none of it is the truth.
+
+He needs a language model to think with and, if you want to hear him, a voice. Both are services you sign
+up for yourself and pay for directly; the mod holds your keys locally and never sends them anywhere but to
+those services. The first half of this file gets you set up; the second half is for people who want to
+change the mod.
+
+---
+
+# For players
+
+## Requirements
+
+- Minecraft **26.2** with **NeoForge 26.2.0.79** or later.
+- An **Anthropic API key** (required). Without it he is in the world but has no voice at all.
+- An **ElevenLabs API key** (optional) if you want him to speak aloud rather than only in chat.
+
+## Install
+
+1. Download `thehush-<version>.jar` from the [Releases](https://github.com/Ayodehi/thehush/releases) page.
+   The version starts with the Minecraft version it was built for (`26.2-1` is for 26.2).
+2. Drop it into your `mods` folder next to NeoForge.
+3. Launch the game once. It writes `config/thehush-common.toml` with every setting and empty key fields.
+
+## Set up the language model (required)
+
+1. Create an API key at [console.anthropic.com](https://console.anthropic.com) (API keys under Settings).
+   It begins with `sk-ant-`. Keep it private: anyone with the key can spend your credit.
+2. Give it to the mod, in whichever way suits you:
+   - **In game:** main menu or pause menu > Mods > The Hush > Config > *Language model* > *API key*. Saving
+     the screen applies it at once, no restart.
+   - **In the config file:** `config/thehush-common.toml`, section `[llm]`, `apiKey = "sk-ant-..."`. The
+     game reloads the file when you save it (or run `/hush reload`).
+   - **In the environment:** export `ANTHROPIC_API_KEY` before launching the game (or the server) and leave
+     `apiKey` empty. Good for servers, and it keeps the key out of any file you might share.
+3. Pick a model in the same section. `claude-sonnet-5` is the recommended default for play: quick and
+   cheap enough for a running conversation. `claude-opus-5` is noticeably deeper in character and several
+   times the cost. `effort = "low"` keeps replies fast; raise it if you want him to think harder.
+
+**What it costs.** Each line you say to him, and each thing he chooses to comment on, is one call. His
+prompt is large but cached, so a call is typically a few cents on Sonnet. `/hush usage` shows calls, tokens,
+and an estimated cost for the session and for the whole campaign; set `llm.inputPricePerMTok` and
+`llm.outputPricePerMTok` if your rates differ from list price.
+
+**What is sent.** Your chat lines addressed to him, what he can see around you (position, nearby creatures,
+your inventory when he looks), his notes about you, and the story text. Nothing goes to Anthropic unless he
+is within earshot or you are talking to him. Lines starting with `!` are ordinary chat and never sent.
+
+## Set up the voice (optional)
+
+1. Sign up at [elevenlabs.io](https://elevenlabs.io) and create an API key. Under the key's permissions
+   give **Text to Speech: Access** (required) and **User: Access** (recommended: it lets the mod read your
+   remaining credits, show them in `/hush usage`, and warn you before he goes silent).
+2. In `config/thehush-common.toml`, section `[voice]`, or the *Voice* page of the in-game config screen:
+   - `provider = "elevenlabs"`
+   - `apiKey = "..."` (or export `ELEVENLABS_API_KEY` and leave it empty)
+   - `voiceId`: the ID of any voice in your ElevenLabs library (Voices > the voice > ID). The default is
+     the stock voice George. A voice you design for him works too.
+   - `model`: `eleven_v3_conversational` is expressive, fast, and reads his delivery cues (`[low]`,
+     `[whispers]`, `[afraid]`); `eleven_v3` is the most expressive but slower; `eleven_multilingual_v2` is
+     lifelike without cues; `eleven_flash_v2_5` is fastest and uses half the credits.
+3. Loudness is the game's *Voice/Speech* slider times `voice.volume`. His voice comes from where he stands,
+   quieter when he whispers, louder when he calls out. Lines never overlap; `voice.lineGapSeconds` is the
+   breath between them.
+
+**Credits.** ElevenLabs bills by character. A line of his is 80 to 150 characters; a chatty hour is a few
+thousand. When the account runs out, he falls back to text, a grey line in chat tells you why and when the
+credits reset, and the mod stops trying until then. Same if the key is wrong: you are told what to fix.
+`/hush status` shows the voice state and characters left; `/hush usage` shows the total spent.
 
 ## How it plays
 
-1. Get a spawn egg from the creative *Spawn Eggs* tab, or run `/hush spawn [persona]`.
-2. Walk up and type in chat. Any talking villager within earshot (8 blocks by default) can hear you; with
-   several nearby, the mod picks the one you are addressing: by name first ("Traveller, ..."), then whoever
-   you were already talking to, then the one you are looking at, then your travelling companion, then the
-   nearest. Right-click a villager to pick it explicitly; sneak + right-click (or `/hush bye`) to end.
-3. Start a line with `!` to talk to other players instead of the villagers.
-4. Nearby players see both sides of the conversation.
+You arrive in a new world. A storm rolls in; when it passes, a grey line tells you where he is. Go and speak
+to him. From there the road is his to point out and yours to walk.
 
-Commands (`/hush ...`):
+- **Talking.** Type in chat when you are near him (8 blocks by default); he hears anything addressed to him.
+  With several talking villagers about, the one you name, the one you were already talking to, or the one
+  you are looking at gets it. Right-click one to talk to it explicitly; sneak and right-click, or
+  `/hush bye`, to stop. Start a line with `!` to talk past him to other players.
+- **He notices things.** Weather, nightfall, monsters, what you mine and build, your gear wearing out, you
+  going hungry. He may say a line about it or keep quiet; roughly one remark every couple of minutes at
+  most (`conversation.ambientRemarks` turns it off).
+- **He remembers.** Things you tell him, what happened between you, how far you have come. His notes live
+  in the world save and survive restarts. `/hush memories` shows what he has written down about you.
+- **He can act.** Follow you, lead you somewhere, point out the nearest structure or ore, hand you an
+  item, teleport you. Ask in plain words. He is reluctant with gifts; the road is not a merchant's cart.
+- **He cannot die**, exactly. Kill him and he is back within a couple of minutes, wherever you are. Each
+  return costs him something. You will notice.
+- **Silence is an answer.** Sometimes he will not speak: at night, near certain things, or when the question
+  is one he will not answer yet. That is him, not a fault. If he has truly lost his voice the mod says so
+  in a grey line.
+
+Commands you will use (`/hush ...`):
 
 | Command | What it does |
 |---|---|
-| `spawn [persona]` | Spawn a talking villager in front of you (op) |
-| `persona <id>` | Change the persona of the villager you are talking to (op) |
 | `bye` | End your conversation |
-| `memories` | Show what the villager you are talking to has written down about you |
-| `forget` | Wipe the chat history and notes of the villager you are talking to (op) |
-| `status` | Show provider status, personas, memory size |
-| `reload` | Reload persona files and re-read the API key (op) |
-| `usage` | API calls, tokens (with cache reads and writes), and estimated cost for this session and the whole campaign; `usage reset` clears the campaign ledger (op) |
+| `memories` | What he has written down about you |
+| `status` | Model and voice status, characters left, who you are talking to |
+| `usage` | Calls, tokens, characters, and estimated cost this session and for the whole campaign |
+| `reload` | Re-read the config and keys (op) |
+| `campaign status` | Where you are on the road (op) |
+| `campaign reset` | Start the road over in this world (op) |
 
-Usage is metered per call in `<world>/thehush/usage.json` (the campaign ledger; it clears with
-`/hush campaign reset`). The cost is an estimate from built-in list prices per tier (Opus 15/75,
-Sonnet 3/15, Haiku 1/5 USD per million input/output tokens, cache writes at 1.25x and reads at 0.1x);
-set `llm.inputPricePerMTok` and `llm.outputPricePerMTok` if your rates differ.
+The title screen's splash text draws from his lines too.
 
-The title screen's splash text draws from the mod's own lines as well (`assets/thehush/texts/splashes.txt`:
-hints, his sayings, and a few jokes); NeoForge merges them into the vanilla pool.
+## Troubleshooting
 
-## Setup
+- **"I have no voice today"** in chat: no working Anthropic key. Check `[llm] apiKey` or the environment
+  variable, then `/hush reload`.
+- **He "mumbles something you can't make out"**: the model call failed; the rest of the line says why
+  (network, a bad key, a rate limit). It passes; ask again.
+- **"is still thinking; he heard you"** on the action bar: he was mid-thought when you spoke. Your line is
+  queued and answered next.
+- **He speaks in text only**: the voice provider is off, the key is wrong, or the credits are gone. A grey
+  line tells you which; `/hush status` shows the state.
+- **The voice is faint or missing**: check the game's *Voice/Speech* slider, then `voice.volume`.
+- **He answers nothing at all**: see *Silence is an answer* above. If it persists in daylight away from
+  anything strange, `/hush status` will say whether the model is reachable.
 
-Requires an Anthropic API key. The easiest way is in game: main menu (or pause menu) > Mods > The Hush >
-Config > Language model > API key. Saving the screen applies the key immediately, no restart needed.
-Alternatively export `ANTHROPIC_API_KEY` in the environment that launches the game/server, or edit
-`config/thehush-common.toml` under `llm.apiKey` (then run `/hush reload`).
+Spoilers: `docs/narrative.md` is the whole story, including its ending. Read it after, not before.
 
-The Traveller is bundled inside the mod; nothing is written to your config folder. To add a persona, or
-replace his text, create `config/thehush/personas/<id>.json` (a file with the id `traveller` overrides the
-bundled one) and spawn it with `/hush spawn <id>`.
+---
 
-## Unprompted remarks
+# For contributors
 
-Villagers notice the world: rain starting or stopping, thunder, dusk, dawn, being caught in the open at
-night, a monster close by, or you being badly hurt. They also notice what you do: ores you mine, a furnace,
-bed, or torch you place, advancements you earn (congratulated promptly), running low on torches underground, the tool in your hand wearing out (once at a third of its life, once when it is about to break),
-hunger with no food, a cold furnace nearby while you carry ore or fuel, or near-total darkness where he stands. Each observation is offered to the model, which may
-answer with one line or stay silent. Cooldowns in code keep this rare (one remark per two minutes by
-default, longer per kind of event); tune or disable it under `conversation.ambientRemarks` in the config.
+## Development
 
-## A voice
+Requires JDK 25. Gradle's toolchain support finds it once installed. If your shell's default `java` is
+older, point `JAVA_HOME` at JDK 25 before running Gradle:
 
-Villagers can speak their lines aloud. Set `voice.provider = "elevenlabs"` and an API key (`voice.apiKey`,
-or the `ELEVENLABS_API_KEY` environment variable) in `config/thehush-common.toml`, or in the in-game config
-screen under *Voice*; `voice.voiceId` picks the voice (the default is the stock voice George; any voice in
-your ElevenLabs library works, including one you design for him), `voice.model` the model
-(`eleven_multilingual_v2` for quality, `eleven_flash_v2_5` for speed and half the credits). Each line is sent
-to ElevenLabs when he speaks; the chat text waits for the audio (up to `voice.timeoutSeconds`) so they
-arrive together, and the sound is streamed to every player within about 24 blocks and played through
-OpenAL as a 3D source that follows him, quieter and shorter-ranged in sculk country. The game's *Voice/Speech*
-slider and `voice.volume` set the loudness. Stage directions in asterisks and coordinate triples are not
-spoken. With `eleven_v3` he also gets **delivery cues**: his prompt lets him begin a line with a short cue
-in square brackets (`[whispers]`, `[low]`, `[sharp]`, `[afraid]`, `[sighs]`, `[calls out]`), which the model
-performs and the chat never shows; the mod adds `[whispers]` on sculk ground and `[calls out]` when the
-player he's talking to is more than 14 blocks off, and a whisper is quieter and shorter-ranged in game, a
-shout louder and further. Older models don't read cues, so they are stripped and the stability and speed
-settings nudged instead. Characters are counted in `/hush usage` at `voice.pricePerThousandChars`. Without a provider, or
-if the request fails, the text goes out as before.
+```sh
+export JAVA_HOME=$(/usr/libexec/java_home -v 25)   # macOS
+./gradlew runClient      # launch the dev client with the mod (game directory: run/)
+./gradlew runServer      # dedicated dev server (run/)
+./gradlew test           # unit tests for the conversation loop, API client, sonar, view cone, voice
+./gradlew build          # jar in build/libs/
+```
 
-## Long-term memory
+Dev runs use `run/` as the game directory, so your keys go in `run/config/thehush-common.toml`; that
+folder is ignored by Git. Every push to `main` builds and tests on GitHub Actions and keeps the jar as an
+artifact.
 
-Besides the recent chat history (saved with the entity and trimmed as it grows), each villager keeps notes:
-things you told it about yourself, events between you, mission progress. The model writes them with the
-`remember` tool when you say something worth keeping, and they are fed back into its prompt whenever you
-talk. They live in the world save at `<world>/thehush/memory/<villager-uuid>.json`, human-readable and
-editable. `/hush memories` lists them; `remember`/`forget` tools maintain them.
+## Architecture
 
-## Looks and voice
-
-The Traveller has his own model (`client/TravellerModel`): a villager's head and nose under a hood, a cowl,
-a long indigo robe with gold trim, arms that hang in wide sleeves, and boots under the hem, with his eyes
-and the small lights on the robe glowing in the dark (a second emissive pass). A persona can set `"skin"`
-to a texture id drawn on that model's 128x64 layout (the map is documented in the texture generator; the
-bundled `thehush:textures/entity/traveller.png` is the reference). A `_dark` variant with the eyes gone
-out is used after enough deaths. Pilgrims keep the vanilla villager model and its 64x64 layout.
-
-## Returning from death
-
-A persona with `"returnsFromDeath": true` (the Traveller) never really dies. On death his identity, chat
-history, follow state, and companion are written to `<world>/thehush/returning.json`; about ninety
-seconds later (`conversation.returnDelaySeconds`), wherever that player is and once no Warden is near them,
-he is recreated with the same UUID (so his notes are still his), placed 12-20 blocks away, and walks over. His prompt gives him no concept of death, so questions about it
-befuddle him and get waved away.
-
-## The campaign: *The Hush*
-
-A persona with `"campaign": "the_hush"` (the Traveller) plays through the story in `docs/narrative.md`.
-The definition is bundled inside the mod. To change the stage text, reveals, beats, or what each return
-from death costs, place a `config/thehush/campaigns/the_hush.json` of your own; it replaces the bundled one
-and is never written by the mod. Progress is saved per world in `<world>/thehush/campaign.json`.
-
-- **The arrival.** In a fresh world, the first join brings a three-minute thunderstorm and a voice under
-  the thunder ("...not again. It is happening again."). Where it cannot rain (desert, savanna, badlands,
-  snow) the storm comes as heat lightning instead: harmless bolts thrown some way off every few seconds,
-  so the thunder is still heard. When it passes
-  the Traveller is at the well of the nearest village (within about 450 blocks of spawn), or a short walk
-  from your spawn if there is none, and a grey narrator line gives the direction and clickable coordinates.
-  Off with `campaign.autoArrival`; `/hush spawn` still works for placing him by hand.
-- **The chosen.** The first player to talk to the Traveller binds the campaign to themselves. Beats,
-  nudges, and the ending key off the chosen; other players are companions.
-- **The road.** Stages advance in order from world triggers (advancements, structures, biomes,
-  dimensions, items, flags, days): arrival, geared, first_night, stronghold, end, dragon, deep_dark,
-  ancient_city, named, quiet, ended. His prompt only ever contains the current and earlier stages, so
-  later material cannot leak. Each stage entry queues a scripted beat; a stage he lingers on gets a nudge.
-- **Deaths cost memory.** Each return from death raises a counter; at thresholds he loses the last day,
-  your name, the next step, why the dark frightens him, and finally his eyes go dark (texture swap). The
-  notes stay in the memory file; only the prompt hides them.
-- **The name.** Saying "Vesper" in chat within 32 blocks of him opens everything. Near a sculk sensor or
-  shrieker it is also *heard*, which brings the first shriek forward.
-- **Pilgrims.** A hooded thing that moves only when no player has it in view (a wide cone, line of
-  sight, and the darkness effect counts as not looking). Unwatched, it walks slowly toward anyone it can
-  see (line of sight, 48 blocks) or hear (16 blocks, 24 if sprinting, not at all if you sneak); lose it and
-  it goes to where it last knew you were, then waits. Every so often, when it knows where you are, it is
-  simply closer: 4 to 6 blocks from you, where you are not looking, standing still. It never takes hold of
-  anyone facing it, and the first two times it reaches you it only shows itself: suddenly right behind you,
-  a low sound at your ear, standing there for a few seconds to be turned around on, then gone into the dark.
-  The third time, its touch is a grip:
-  for six seconds you cannot walk or jump, darkness falls, and it bleeds you a heart a second while
-  anything nearby gets its chance; then it lets go, leaves you weak for twenty seconds, withdraws into the
-  dark out of sight, and can come again after ten. It also takes one of his notes about you. Weapons do
-  nothing; a soul torch or soul lantern placed within two blocks of it, while you watch it or while it
-  holds you, crumbles it, and so does sunlight. Neither it nor the Traveller is heard by sculk.
-- **The Wick.** A low, charcoal-dark thing with embers for a mouth that eats torchlight, met in caves below
-  y 20 once you've lit any of them (a single torch within 24 blocks is enough; `campaign.wicks`,
-  `campaign.wickRarity`). It drifts to torches and lit campfires that no player can see and touches them
-  out: torches become **snuffed torches** (same shape, black head, a thread of smoke, no light; relight
-  with flint and steel or a fire charge, or craft one with a coal back into a torch). It keeps to the dark
-  and slips away when you come near with light; cornered, or hurt, it fights (20 health, 4 damage), and a
-  blow that lands eats up to a stack of the torches you carry. It cannot pass soul
-  fire and burns in daylight. The Traveller knows it and tells you what stops it.
-- **The Echo.** The Hush's hunter, sent after the chosen once you have iron armor and until the road
-  goes into the Quiet: one hunt every `campaign.hunterMinutes` (25, give or take a third; `campaign.hunters`
-  turns them off). It is blind and works by sonar: you hear its clicks in the dark, and it hears feet
-  (20 blocks walking, 32 sprinting or jumping, 6 sneaking, none standing still and sneaking; half through
-  walls), and every eight seconds or so a ping finds you within 48 blocks whatever you do. It is placed
-  30 to 50 blocks off, out of sight, in the Overworld or the Nether (never the Deep Dark, the End, or the
-  Quiet), and stalks for one and a half to four minutes: holding a post 18 to 28 blocks from where it last
-  heard you, moving it when you come within 14 or turn to look, never seen if it can help it. Then it
-  shrieks, stands for a second and a half, and comes. It never despawns; a chase it cannot win on foot ends
-  with it beside you again. Hit it while it circles and it comes at once. Balanced for iron armor and an
-  iron sword: 50 health, 7 damage, a blow every second and a half, 4 armor, some knockback resistance;
-  each later hunt adds 5 health and half a heart of damage, up to four times. The only way out is to kill
-  it. The Traveller is afraid of them, warns you when one is on your trail, keeps away from it, and says
-  a word when it is dead.
-- **The Unsaid.** Grey ghosts in the Traveller's own shape (his model, translucent, three faded robes,
-  a face that is only shadow with two pale lights for eyes), drifting over the Nether's soul sand valleys
-  from the iron-armor stage until the road goes into the Deep Dark (`campaign.unsaid`,
-  `campaign.unsaidRarity`, at most two near a player). They are what is left of the ones who crossed the
-  frame and turned back. They whisper in chat, unattributed and grey: names from the register, fragments
-  of what he has never said, half of his true name, and things *you* said to him. They drift toward him
-  first if he is in the Nether with you, then toward you; a touch on him takes a note from his memory and
-  gets a shaken line out of him, a touch on you does 4 damage and gives one of your own lines back. **Your
-  voice holds them:** the moment anyone speaks in chat within 24 blocks, every one nearby stops for four
-  seconds to listen. Fire and lava do nothing; steel does (24 health). Each one killed leaves a page with
-  a name on it and a word from him. He sends you into those valleys himself: in the Nether he adds a
-  third errand to the blaze rods and pearls, a stack of soul sand or soul soil for "torches that burn
-  blue", reminds you every eight minutes while you're there without any, and notes (flag `has_soul`) when
-  you have it.
-- **Clues.** *A Register of Those Who Crossed* (written book) on a lectern in the stronghold library and
-  sometimes in library chests; *Bell (V)* in a chest by the ancient city frame and sometimes in city
-  chests; sculk on the village well on day 3; a villager gone on day 4; sensor patches after the dragon
-  and a shriek with three seconds of darkness two nights later; silverfish that leave him alone.
-- **The frame and the Quiet.** In the ancient city, the reinforced deepslate frame is found and recorded.
-  Ring a bell while standing inside it: the frame lights and pulls everyone standing in it, him included,
-  into the Quiet, a datapack dimension (`thehush:quiet`: flat sculk, no sky, no light) where the dead
-  village, the well, and the throat beneath it are built on first entry. Music and ambient sound are
-  muted there through a small network packet.
-- **The Hush.** In the throat: Listening (sensors spawn wardens, cap three; wool, snowballs, and arrows
-  work as in vanilla), Calling (full darkness, every sensor lit, shrieks; ringing a bell or hitting a note
-  block pulls the wardens to the sound), the Answer (he walks to the heart and speaks; every warden turns
-  on him; ring the pedestal bell within thirty seconds or he dies and it starts over), Sound (bells, note
-  blocks, the End Poem in his voice, the sculk turning to stone).
-- **The ending.** You wake at your bed at sunrise. The scripted sculk is gone. He is back where he
-  arrived, remembers nothing of you (your notes are archived in his memory file, the Pilgrims' thefts
-  restored), and greets you as a stranger. `/hush campaign reset` starts the road again.
-
-Debug commands (ops): `/hush campaign status`, `stage <id>`, `flag <name>`, `chosen <player>`,
-`reset`, `pilgrim` (one behind you), `hunt` (send an Echo now; `hunt status`), `snapshot` (write a text picture of your surroundings to `<world>/thehush/snapshot.txt`), `quiet` (cross now),
-`hush start|status|reset`. The Pilgrim, the Wick, the Echo, and the Unsaid also have spawn eggs. `campaign.enabled` and `campaign.debugLog` are in the config.
-
-## Debugging from outside the game
-In dev runs the mod opens a small loopback HTTP bridge (`127.0.0.1:25599`) and the repo ships an MCP server
-(`tools/mcp/hush_mcp.py`, registered in `.mcp.json`) so Claude Code can read the live world (players,
-entities, the Traveller's history, notes and prompt, campaign state, a snapshot, the chat transcript), run
-commands, speak as a player, tail the log, build, and relaunch the client. See `tools/mcp/README.md`.
-Outside dev runs the bridge is off unless `debug.bridge = true` in the config.
+- `llm/` is Minecraft-independent: `LlmProvider` (pluggable backend), `ClaudeProvider` (Messages API over
+  Java's `HttpClient` + Gson, with prompt caching and refusal fallbacks), and `ConversationEngine`
+  (history, the ask -> tool -> ask loop, JSON persistence). All LLM work runs on virtual threads; the
+  server tick is never blocked.
+- `persona/` holds the bundled Traveller and builds the stable system prompt.
+- `tools/` are his senses and actions; they run on the server thread via `ToolRegistry`.
+- `conversation/ConversationManager` maps players to villagers, routes chat, and queues lines that arrive
+  while he is busy. `AmbientObserver` produces the unprompted remarks.
+- `entity/AiVillagerEntity` extends the vanilla `Villager`, swaps trading for conversation, saves the
+  history with the entity, and carries his seat, follow, lead, and post behaviour.
+- `voice/` is text to speech: `VoiceService` (per-speaker queue so lines never overlap, outage handling,
+  credit report), `ElevenLabsVoice`, `Speech` (cues and what is shown versus spoken); `client/VoiceClient`
+  plays PCM through OpenAL as a 3D source that follows him.
+- `campaign/` runs the story: `CampaignManager` (state, stage machine, beats, forgetting, prompt section),
+  `Clues` (placed items and sculk), `Avoidance`, `NightSilence`, `LanternEvents`, `Unseen` (sound-only
+  scares), `Quiet` (the far-future dimension builder), `HushEncounter` (the boss).
+- `entity/PilgrimEntity`, `WickEntity`, `EchoEntity` (with `Sonar` and `EchoHunts`), `UnsaidEntity` are the
+  creatures; `block/` holds the snuffed torch and dark soul lantern.
+- `debug/DebugBridge` is a loopback HTTP server for live inspection; `tools/mcp/hush_mcp.py` wraps it as
+  an MCP server so Claude Code can read the running world. See `tools/mcp/README.md`. Dev runs turn it on;
+  otherwise `debug.bridge = true`.
+- `client/` has the Traveller's model and renderer, the compass tell, the silence and drop effects.
 
 ## What the villager can do
 
@@ -209,54 +177,65 @@ Tools the model may call while composing a reply:
 
 - `get_time_and_weather`, `get_location`, `look_around`
 - `inspect_player`, `get_player_inventory`, `get_nearby_creatures`
-- `locate` (nearest structure, biome, or point of interest, like `/locate`)
-- `find_block` (nearest blocks of a kind within 16, with direction and depth), `lead_player_to`, `stop_leading`
-- `send_player_to` (teleport), `give_item` (like `/give`)
-- `remember`, `forget` (long-term notes about you, stored in the world save)
-- `follow_player`, `stop_following` (pet-style: walks behind you, teleports to catch up, crosses dimensions)
-- `walk_to_player`, `face_player`
+- `locate` (nearest structure, biome, or point of interest), `find_block` (nearest blocks of a kind)
+- `lead_player_to`, `stop_leading`, `send_player_to` (teleport), `give_item`
+- `remember`, `forget` (long-term notes, stored in the world save)
+- `follow_player`, `stop_following`, `walk_to_player`, `face_player`
 
 Add a tool by implementing `NpcTool` in `com.ayodehi.thehush.tools` and listing it in `WorldTools.all()`.
 
-## Development
+## Personas and story text
 
-Requires JDK 25. Gradle's toolchain support finds it automatically once installed
-(`~/Library/Java/JavaVirtualMachines/temurin-25.jdk` on this machine). If your shell's default `java` is
-older, point `JAVA_HOME` at JDK 25 before running Gradle:
+The Traveller and the campaign definition are bundled in the jar; the mod writes nothing to
+`config/thehush/`. To add a persona or override his text, create `config/thehush/personas/<id>.json` (the
+id `traveller` replaces the bundled one) and spawn it with `/hush spawn <id>`. To change stage text,
+reveals, beats, or the cost of each death, place `config/thehush/campaigns/the_hush.json`; it replaces the
+bundled definition. Progress is per world in `<world>/thehush/campaign.json`; his notes are in
+`<world>/thehush/memory/`; both are plain JSON.
 
-```sh
-export JAVA_HOME=$(/usr/libexec/java_home -v 25)
-./gradlew runClient      # launch the dev client with the mod
-./gradlew runServer      # dedicated dev server (run/ directory)
-./gradlew test           # unit tests for the conversation loop and API client
-./gradlew build          # jar in build/libs/
-```
+A persona can set `"skin"` to a texture on the Traveller model's 128x64 layout (the generator in
+`tools/textures` documents the map), `"voice"` for his sounds, `"returnsFromDeath"`, and `"campaign"`.
 
-## Architecture
+## How the campaign is built (spoilers)
 
-- `llm/` is Minecraft-independent: `LlmProvider` (pluggable backend), `ClaudeProvider` (Messages API over
-  Java's `HttpClient` + Gson, with prompt caching and server-side refusal fallbacks), and
-  `ConversationEngine` (history, the ask -> tool -> ask loop, JSON persistence).
-- `persona/` loads persona JSON and builds the stable system prompt.
-- `tools/` are the villager's senses and actions; they run on the server thread via `ToolRegistry`.
-- `entity/AiVillagerEntity` extends the vanilla `Villager`, swaps trading for conversation, and saves the
-  conversation history with the entity.
-- `conversation/ConversationManager` maps players to villagers and routes chat.
-- `campaign/` runs the story: `CampaignManager` (state, stage machine, beats, forgetting, prompt section),
-  `Clues` (placed items and sculk), `Quiet` (the far-future dimension builder), `HushEncounter` (the boss).
-- `entity/PilgrimEntity` is the watched-and-still creature; `entity/WickEntity` and `WickSpawner` are
-  the light-eater and where it comes from; `block/SnuffedTorchBlock` is what it leaves behind;
-  `entity/EchoEntity` is the blind hunter (`Sonar` is its hearing, `EchoHunts` decides when one is
-  sent); `entity/UnsaidEntity` and `UnsaidSpawner` are the Nether ghosts; `network/HushSilencePayload`
-  mutes the client.
+The narrative is `docs/narrative.md`; the build plan and its deviations are `docs/implementation-plan.md`.
+In brief:
 
-All LLM work happens on virtual threads; the server tick is never blocked.
+- **Arrival.** A three-minute storm on first join (heat lightning where it cannot rain), then he is placed
+  by the well of the nearest village, or near spawn, and a grey line gives direction and rough distance.
+  The first player to speak to him is the chosen.
+- **The road.** Stages advance in order from world triggers (advancements, structures, biomes, dimensions,
+  items, flags, days). His prompt only ever contains the current and earlier stages. Stage entry queues a
+  scripted beat; lingering earns a nudge; a quiet spell earns a guiding line grounded in what the player
+  carries.
+- **Deaths cost memory.** Thresholds hide the last day, the player's name, the next step, his fear, and
+  finally darken his eyes. Notes stay in the file; only the prompt hides them.
+- **The name.** Saying it within 32 blocks of him opens everything; near a sensor it is heard.
+- **Clues in the world.** Villagers keep their distance from him. A compass spins beside him; a recovery
+  compass points at him. The village bell carries a letter. Sculk grows on the well; a villager goes
+  missing; near sculk at night he will not answer. The register book in the stronghold library. Silverfish
+  leave him alone. After the dragon, sensors and a shriek. In the ancient city the soul lanterns go out
+  toward the frame.
+- **Creatures.** Pilgrims move only unwatched and grip from behind; soul fire and sunlight undo them.
+  The Wick eats torchlight below y 20 and leaves snuffed torches. The Echo hunts the chosen by sonar on a
+  timer once they have iron. The Unsaid drift over the soul sand valleys and are held by a voice.
+- **The Unseen.** Sound-only scares for a player alone in the dark: footsteps behind, a heartbeat under
+  the sculk, a breath of total silence and a click, a knock, something below, the bell at night.
+  `/hush campaign unseen <kind>` plays one.
+- **The frame, the Quiet, the Hush.** Ring a bell inside the frame to cross into `thehush:quiet`, a flat
+  sculk dimension with the dead village built on entry; the throat beneath the well holds the three-phase
+  encounter (Listening, Calling, the Answer) and the ending, after which he greets the player as a stranger.
 
-## Licence
+Debug commands (ops): `/hush campaign status | stage <id> | flag <name> | chosen <player> | reset |
+pilgrim | hunt [status] | unseen <kind> | snapshot | quiet | hush start|status|reset`. Every creature has a
+spawn egg. `campaign.debugLog` logs flags, stages, and scares.
 
-MIT; see `LICENSE`. Three textures (the dark soul lantern, the snuffed torch, and the Pilgrim) are derived
-from Minecraft's own and remain Mojang's; they are not covered by the MIT licence. Minecraft is a trademark
-of Mojang Studios; this mod is not affiliated with or endorsed by Mojang or Microsoft.
+## Configuration reference
+
+`config/thehush-common.toml` has five sections: `[llm]` (key, model, effort, prices), `[conversation]`
+(earshot, history length, remarks, return delay), `[voice]` (provider, key, voice, model, volume, line gap),
+`[campaign]` (enable, arrival, creature toggles and rarities, unseen sounds, debug log), `[debug]` (the
+bridge). Every value has a comment in the file and a tooltip in the in-game screen.
 
 ## Releasing
 
@@ -271,6 +250,10 @@ Versions are `<minecraft version>-<build>`, for example `26.2-1`. To cut a relea
    ```
 
 The Release workflow checks the tag against `gradle.properties`, builds and tests, and publishes a GitHub
-Release with `thehush-<version>.jar` attached. Every push to `main` also builds and keeps the jar as a
-workflow artifact.
+Release with `thehush-<version>.jar` attached.
 
+## Licence
+
+MIT; see `LICENSE`. Three textures (the dark soul lantern, the snuffed torch, and the Pilgrim) are derived
+from Minecraft's own and remain Mojang's; they are not covered by the MIT licence. Minecraft is a trademark
+of Mojang Studios; this mod is not affiliated with or endorsed by Mojang or Microsoft.
