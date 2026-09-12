@@ -257,3 +257,20 @@ All LLM work happens on virtual threads; the server tick is never blocked.
 MIT; see `LICENSE`. Three textures (the dark soul lantern, the snuffed torch, and the Pilgrim) are derived
 from Minecraft's own and remain Mojang's; they are not covered by the MIT licence. Minecraft is a trademark
 of Mojang Studios; this mod is not affiliated with or endorsed by Mojang or Microsoft.
+
+## Releasing
+
+Versions are `<minecraft version>-<build>`, for example `26.2-1`. To cut a release:
+
+1. Bump `mod_build` in `gradle.properties` and commit.
+2. Tag the commit `v<version>` and push the tag:
+
+   ```
+   git tag v26.2-2
+   git push origin v26.2-2
+   ```
+
+The Release workflow checks the tag against `gradle.properties`, builds and tests, and publishes a GitHub
+Release with `thehush-<version>.jar` attached. Every push to `main` also builds and keeps the jar as a
+workflow artifact.
+
