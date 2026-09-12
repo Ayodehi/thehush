@@ -25,6 +25,39 @@ public final class LlmService {
     /** Called on server start, after config values are loaded. Safe to call again to pick up changes. */
     public synchronized void configure() {
         shutdown();
+        Config.LlmBackend kind = Config.LLM_PROVIDER.get();
+        if (kind == Config.LlmBackend.OLLAMA) {
+            executor = Executors.newThreadPerTaskExecutor(Thread.ofVirtual().name("thehush-llm-", 0).factory());
+            provider = new OllamaProvider(new OllamaProvider.Settings(
+                    Config.OLLAMA_URL.get().strip().replaceAll("/+$", ""),
+                    Config.OLLAMA_MODEL.get().strip(),
+                    Config.MAX_TOKENS.get(),
+                    Config.OLLAMA_CONTEXT.get(),
+                    Config.OLLAMA_THINK.get(),
+                    Duration.ofSeconds(Config.REQUEST_TIMEOUT_SECONDS.get())), executor);
+            status = "ok";
+            return;
+        }
+        if (kind == Config.LlmBackend.OPENAI) {
+            String key = Config.OPENAI_API_KEY.get().strip();
+            if (key.isEmpty()) {
+                String env = Config.OPENAI_API_KEY_ENV_VAR.get().strip();
+                String fromEnv = env.isEmpty() ? null : System.getenv(env);
+                key = fromEnv == null ? "" : fromEnv.strip();
+            }
+            executor = Executors.newThreadPerTaskExecutor(Thread.ofVirtual().name("thehush-llm-", 0).factory());
+            provider = new OpenAiProvider(new OpenAiProvider.Settings(
+                    Config.OPENAI_URL.get().strip(),
+                    key,
+                    Config.OPENAI_MODEL.get().strip(),
+                    Config.MAX_TOKENS.get(),
+                    Config.OPENAI_REASONING_EFFORT.get().strip(),
+                    Config.OPENAI_INPUT_PRICE.get(),
+                    Config.OPENAI_OUTPUT_PRICE.get(),
+                    Duration.ofSeconds(Config.REQUEST_TIMEOUT_SECONDS.get())), executor);
+            status = "ok";
+            return;
+        }
         String apiKey = Config.API_KEY.get().strip();
         if (apiKey.isEmpty()) {
             String env = Config.API_KEY_ENV_VAR.get().strip();
@@ -33,9 +66,9 @@ public final class LlmService {
         }
         if (apiKey.isEmpty()) {
             provider = null;
-            status = "no API key: set llm.apiKey in config/hush-common.toml or export "
-                    + Config.API_KEY_ENV_VAR.get();
-            TheHushMod.LOGGER.warn("Villager AI: {}", status);
+            status = "no API key: set llm.anthropic.apiKey in config/thehush-common.toml, export "
+                    + Config.API_KEY_ENV_VAR.get() + ", or set llm.provider = \"ollama\" for a local model";
+            TheHushMod.LOGGER.warn("The Hush: {}", status);
             return;
         }
         executor = Executors.newThreadPerTaskExecutor(Thread.ofVirtual().name("thehush-llm-", 0).factory());

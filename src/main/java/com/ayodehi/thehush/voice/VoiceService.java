@@ -46,6 +46,8 @@ public final class VoiceService {
     /** Why he is silent right now, and until when (epoch millis); null when the voice is working. */
     private volatile @Nullable Outage outage;
     private volatile VoiceProvider.@Nullable Credits credits;
+    /** USD per thousand characters for the configured engine (0 for a local one). */
+    private volatile double pricePerThousand;
     private static final long AUTH_HOLD_MILLIS = 30 * 60_000L;
     private static final long QUOTA_HOLD_MILLIS = 30 * 60_000L;
     private static final long RATE_HOLD_MILLIS = 20_000L;
@@ -94,8 +96,22 @@ public final class VoiceService {
         provider = null;
         outage = null;
         credits = null;
-        String kind = Config.VOICE_PROVIDER.get().trim().toLowerCase();
-        if (kind.isEmpty() || kind.equals("none")) return;
+        Config.VoiceBackend kind = Config.VOICE_PROVIDER.get();
+        if (kind == Config.VoiceBackend.NONE) return;
+        if (executor == null) executor = Executors.newVirtualThreadPerTaskExecutor();
+        if (kind == Config.VoiceBackend.OPENAI) {
+            String key = Config.SPEECH_API_KEY.get().trim();
+            if (key.isEmpty()) {
+                String env = System.getenv(Config.SPEECH_API_KEY_ENV_VAR.get());
+                key = env == null ? "" : env.trim(); // may stay empty: local servers want none
+            }
+            pricePerThousand = Config.SPEECH_PRICE_PER_THOUSAND.get();
+            provider = new OpenAiSpeechVoice(new OpenAiSpeechVoice.Settings(Config.SPEECH_URL.get().trim(), key,
+                    Config.SPEECH_MODEL.get().trim(), Config.SPEECH_VOICE.get().trim(), Config.SPEECH_FORMAT.get(),
+                    Config.SPEECH_PCM_RATE.get(), Config.SPEECH_CUES.get(), Config.SPEECH_SPEED.get(),
+                    Config.SPEECH_EXTRA.get(), Config.VOICE_TIMEOUT_SECONDS.get()), executor);
+            return;
+        }
         String key = Config.VOICE_API_KEY.get().trim();
         if (key.isEmpty()) {
             String env = System.getenv(Config.VOICE_API_KEY_ENV_VAR.get());
@@ -105,13 +121,13 @@ public final class VoiceService {
             TheHushMod.LOGGER.warn("voice.provider is {} but no API key is set; he stays silent", kind);
             return;
         }
-        if (executor == null) executor = Executors.newVirtualThreadPerTaskExecutor();
-        if (kind.equals("elevenlabs")) {
+        if (kind == Config.VoiceBackend.ELEVENLABS) {
+            pricePerThousand = Config.VOICE_PRICE_PER_THOUSAND.get();
             provider = new ElevenLabsVoice(new ElevenLabsVoice.Settings(key, Config.VOICE_ID.get(), Config.VOICE_MODEL.get(),
                     Config.VOICE_STABILITY.get(), Config.VOICE_SIMILARITY.get(), Config.VOICE_TIMEOUT_SECONDS.get()), executor);
             refreshCredits(null);
         } else {
-            TheHushMod.LOGGER.warn("Unknown voice.provider '{}'; he stays silent", kind);
+            TheHushMod.LOGGER.warn("Unknown voice.provider {}; he stays silent", kind);
         }
     }
 
@@ -338,7 +354,7 @@ public final class VoiceService {
             else TheHushMod.LOGGER.warn("Voice failed for {}: no audio", u.speaker.speakerName());
             return Math.min(MAX_TEXT_ONLY_MILLIS, u.text.length() * MILLIS_PER_CHAR);
         }
-        UsageMeter.get().recordVoice(u.text.length(), Config.VOICE_PRICE_PER_THOUSAND.get());
+        UsageMeter.get().recordVoice(u.text.length(), pricePerThousand);
         AiVillagerEntity live = u.speaker.current();
         if (!live.isAlive()) return 0;
         stream(live, a, u.manner);

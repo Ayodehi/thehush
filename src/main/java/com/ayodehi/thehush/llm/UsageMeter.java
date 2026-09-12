@@ -117,9 +117,15 @@ public final class UsageMeter {
         file = null;
     }
 
+    /** A call priced by the Anthropic rates in the config (or the built-in table for the model's tier). */
     public synchronized void record(String model, LlmResponse.Usage usage) {
+        record(model, usage, inputPrice.getAsDouble(), outputPrice.getAsDouble());
+    }
+
+    /** A call priced by the given USD-per-million rates; a provider that knows its own prices passes them here. */
+    public synchronized void record(String model, LlmResponse.Usage usage, double inputPerMTok, double outputPerMTok) {
         double usd = Pricing.cost(model, usage.inputTokens(), usage.outputTokens(), usage.cacheReadTokens(),
-                usage.cacheWriteTokens(), inputPrice.getAsDouble(), outputPrice.getAsDouble());
+                usage.cacheWriteTokens(), inputPerMTok, outputPerMTok);
         session.add(model, usage, usd, true);
         campaign.add(model, usage, usd, true);
         save();

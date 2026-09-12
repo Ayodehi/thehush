@@ -17,7 +17,9 @@ change the mod.
 ## Requirements
 
 - Minecraft **26.2** with **NeoForge 26.2.0.79** or later.
-- An **Anthropic API key** (required). Without it he is in the world but has no voice at all.
+- A language model: an **Anthropic API key** (Claude, the best experience, costs money), **Ollama** running
+  a local model (free, no key, quality depends on the model), or any **OpenAI-compatible server** such as a
+  LiteLLM gateway, OpenAI, or OpenRouter. Without one he is in the world but has no voice at all.
 - An **ElevenLabs API key** (optional) if you want him to speak aloud rather than only in chat.
 
 ## Install
@@ -29,12 +31,17 @@ change the mod.
 
 ## Set up the language model (required)
 
+He can think through Claude (recommended), through a model running on your own machine via Ollama, or
+through any server that speaks the OpenAI chat API, which includes LiteLLM.
+
+### Option A: Claude
+
 1. Create an API key at [console.anthropic.com](https://console.anthropic.com) (API keys under Settings).
    It begins with `sk-ant-`. Keep it private: anyone with the key can spend your credit.
 2. Give it to the mod, in whichever way suits you:
    - **In game:** main menu or pause menu > Mods > The Hush > Config > *Language model* > *API key*. Saving
      the screen applies it at once, no restart.
-   - **In the config file:** `config/thehush-common.toml`, section `[llm]`, `apiKey = "sk-ant-..."`. The
+   - **In the config file:** `config/thehush-common.toml`, section `[llm.anthropic]`, `apiKey = "sk-ant-..."`. The
      game reloads the file when you save it (or run `/hush reload`).
    - **In the environment:** export `ANTHROPIC_API_KEY` before launching the game (or the server) and leave
      `apiKey` empty. Good for servers, and it keeps the key out of any file you might share.
@@ -44,14 +51,56 @@ change the mod.
 
 **What it costs.** Each line you say to him, and each thing he chooses to comment on, is one call. His
 prompt is large but cached, so a call is typically a few cents on Sonnet. `/hush usage` shows calls, tokens,
-and an estimated cost for the session and for the whole campaign; set `llm.inputPricePerMTok` and
-`llm.outputPricePerMTok` if your rates differ from list price.
+and an estimated cost for the session and for the whole campaign; set `inputPricePerMTok` and
+`outputPricePerMTok` in `[llm.anthropic]` if your rates differ from list price.
 
 **What is sent.** Your chat lines addressed to him, what he can see around you (position, nearby creatures,
 your inventory when he looks), his notes about you, and the story text. Nothing goes to Anthropic unless he
 is within earshot or you are talking to him. Lines starting with `!` are ordinary chat and never sent.
 
+### Option B: Ollama (local, free)
+
+1. Install [Ollama](https://ollama.com) and pull a model that supports tool calling, for example
+   `ollama pull llama3.1` or `ollama pull qwen3`. Tool calling is what lets him look around, follow you,
+   and hand you things; a model without it can talk but not act, and the mod says so in the log.
+2. In `config/thehush-common.toml`, or the *Language model* page in game:
+   - `[llm]`: `provider = "OLLAMA"`
+   - `[llm.ollama]`: `model = "llama3.1"` (the tag you pulled); `url` if Ollama is not on this machine at the
+     default port; `think = true` only for reasoning models (qwen3, deepseek-r1) and only if you accept
+     slower replies; `context` stays at 16k or more, since his prompt alone is about 10k tokens.
+3. Make sure Ollama is running (`ollama serve`, or the desktop app). If it is not, he "mumbles" that Ollama
+   is not running; if the model is missing, that it needs pulling.
+
+Expect a different Traveller. Small local models follow his rules less closely, forget the [cues] the voice
+needs, and call tools less reliably than Claude; a 14B or larger model with enough VRAM comes closest.
+Nothing leaves your machine, and `/hush usage` shows tokens but no cost.
+
+### Option C: an OpenAI-compatible server (LiteLLM, OpenAI, OpenRouter, LM Studio, ...)
+
+Anything that serves `/v1/chat/completions` works. [LiteLLM](https://github.com/BerriAI/litellm) is the
+usual reason to want this: one gateway in front of many providers, with its own keys, budgets, and
+logging.
+
+1. Have the server running and know its URL, a key if it wants one, and a model name it recognises. For
+   LiteLLM that is the proxy URL (default `http://127.0.0.1:4000`), a virtual key, and one of the model
+   aliases from its config.
+2. In `config/thehush-common.toml`, or the *Language model* page in game:
+   - `[llm]`: `provider = "OPENAI"`
+   - `[llm.openai]`: `url`, `apiKey` (or export `OPENAI_API_KEY`), and `model`. `reasoningEffort` only for
+     models that take it. Set `inputPricePerMTok` and `outputPricePerMTok` if you want `/hush usage` to show
+     a cost; the mod cannot know what an arbitrary server charges, so zero means "unknown", not free.
+3. The model must support tool calling for him to look around, follow, and hand things over. Servers that
+   refuse tools get retried without them, and the log says so.
+4. If the gateway fronts an Ollama model, set the context window on the gateway's side: the OpenAI API has
+   no field for it, so Ollama would otherwise use its 4k default and cut off the start of his prompt. In
+   LiteLLM that is `num_ctx: 16384` under the model's `litellm_params`.
+
 ## Set up the voice (optional)
+
+He can speak through ElevenLabs (the best voices, paid, cloud) or through any server that speaks the
+OpenAI speech API, which includes free local engines: Kokoro, Orpheus, and Chatterbox.
+
+### Option A: ElevenLabs
 
 1. Sign up at [elevenlabs.io](https://elevenlabs.io) and create an API key. Under the key's permissions
    give **Text to Speech: Access** (required) and **User: Access** (recommended: it lets the mod read your
@@ -72,6 +121,25 @@ is within earshot or you are talking to him. Lines starting with `!` are ordinar
 thousand. When the account runs out, he falls back to text, a grey line in chat tells you why and when the
 credits reset, and the mod stops trying until then. Same if the key is wrong: you are told what to fix.
 `/hush status` shows the voice state and characters left; `/hush usage` shows the total spent.
+
+### Option B: a local engine (Kokoro, Orpheus, Chatterbox) or OpenAI
+
+All of these serve `POST /v1/audio/speech`, so they share one settings page. Set the voice `provider` to
+`OPENAI` and fill in `[voice.openai]`:
+
+| Engine | How to run it | `url` | `model` | `voice` | `cues` | Notes |
+|---|---|---|---|---|---|---|
+| **Kokoro** (Apache 2.0) | `docker run -p 8880:8880 ghcr.io/remsky/kokoro-fastapi-cpu` | `http://127.0.0.1:8880` | `kokoro` | `bm_george`, `bm_lewis`, `am_michael` | `NONE` | Fast on a CPU, clean English. The default settings. |
+| **Orpheus** (Apache 2.0) | Orpheus-FastAPI, with the model served by llama.cpp or LM Studio | its port | `orpheus` | `tara`, `leo`, `dan`, `zac` | `ORPHEUS` | Expressive; his cues become inline tags such as a sigh or a gasp. Wants a GPU or a fast Mac. |
+| **Chatterbox** (MIT) | chatterbox-tts-api | its port | `chatterbox` | a name or sample path | `NONE` | Voice cloning; set `extra` to `{"exaggeration": 0.6}` for more feeling. GPU recommended. |
+| **OpenAI** | cloud | `https://api.openai.com/v1` | `gpt-4o-mini-tts` | `onyx`, `ash`, `echo` | `INSTRUCTIONS` | Needs `apiKey`; his cues go in the instructions field. Set `pricePerThousandChars`. |
+
+`format` stays `WAV` unless you know the server returns raw PCM; `speed` is the pace. Where an engine
+cannot take cues they are stripped and his pace nudged instead, as with older ElevenLabs models. A local
+server that is not running gets him a grey "nothing is listening" line and text only until it is.
+
+Kokoro is the one to start with: one Docker command, no GPU, and a line of his comes back in about a
+second.
 
 ## How it plays
 
@@ -111,10 +179,11 @@ The title screen's splash text draws from his lines too.
 
 ## Troubleshooting
 
-- **"I have no voice today"** in chat: no working Anthropic key. Check `[llm] apiKey` or the environment
+- **"I have no voice today"** in chat: no working Anthropic key. Check `[llm.anthropic] apiKey` or the environment
   variable, then `/hush reload`.
 - **He "mumbles something you can't make out"**: the model call failed; the rest of the line says why
-  (network, a bad key, a rate limit). It passes; ask again.
+  (network, a bad key, a rate limit; with Ollama, that it is not running or the model is not pulled). It
+  passes; ask again.
 - **"is still thinking; he heard you"** on the action bar: he was mid-thought when you spoke. Your line is
   queued and answered next.
 - **He speaks in text only**: the voice provider is off, the key is wrong, or the credits are gone. A grey
@@ -149,7 +218,9 @@ artifact.
 ## Architecture
 
 - `llm/` is Minecraft-independent: `LlmProvider` (pluggable backend), `ClaudeProvider` (Messages API over
-  Java's `HttpClient` + Gson, with prompt caching and refusal fallbacks), and `ConversationEngine`
+  Java's `HttpClient` + Gson, with prompt caching and refusal fallbacks), `OllamaProvider` (`/api/chat` with
+  OpenAI-style tool calls, no cache, free), `OpenAiProvider` (chat completions for LiteLLM, OpenAI, and other
+  gateways), and `ConversationEngine`
   (history, the ask -> tool -> ask loop, JSON persistence). All LLM work runs on virtual threads; the
   server tick is never blocked.
 - `persona/` holds the bundled Traveller and builds the stable system prompt.
@@ -159,7 +230,9 @@ artifact.
 - `entity/AiVillagerEntity` extends the vanilla `Villager`, swaps trading for conversation, saves the
   history with the entity, and carries his seat, follow, lead, and post behaviour.
 - `voice/` is text to speech: `VoiceService` (per-speaker queue so lines never overlap, outage handling,
-  credit report), `ElevenLabsVoice`, `Speech` (cues and what is shown versus spoken); `client/VoiceClient`
+  credit report), `ElevenLabsVoice`, `OpenAiSpeechVoice` (the OpenAI speech endpoint: Kokoro, Orpheus,
+  Chatterbox, OpenAI, LiteLLM; `Wav` decodes what comes back), `Speech` (cues and what is shown versus
+  spoken); `client/VoiceClient`
   plays PCM through OpenAL as a 3D source that follows him.
 - `campaign/` runs the story: `CampaignManager` (state, stage machine, beats, forgetting, prompt section),
   `Clues` (placed items and sculk), `Avoidance`, `NightSilence`, `LanternEvents`, `Unseen` (sound-only
@@ -232,10 +305,12 @@ spawn egg. `campaign.debugLog` logs flags, stages, and scares.
 
 ## Configuration reference
 
-`config/thehush-common.toml` has five sections: `[llm]` (key, model, effort, prices), `[conversation]`
-(earshot, history length, remarks, return delay), `[voice]` (provider, key, voice, model, volume, line gap),
-`[campaign]` (enable, arrival, creature toggles and rarities, unseen sounds, debug log), `[debug]` (the
-bridge). Every value has a comment in the file and a tooltip in the in-game screen.
+`config/thehush-common.toml` has these sections: `[llm]` (provider, output limit, timeout) with
+`[llm.anthropic]` (key, model, effort, prices), `[llm.ollama]` (server, model, context, thinking), and
+`[llm.openai]` (URL, key, model, prices) beneath it; `[conversation]`
+(earshot, history length, remarks, return delay); `[voice]` (provider, volume, line gap, timeout) with `[voice.elevenlabs]` (key, voice, model, style, price)
+and `[voice.openai]` (URL, model, voice, format, cues, extra fields) beneath it; `[campaign]` (enable,
+arrival, creature toggles and rarities, unseen sounds, debug log); `[debug]` (the bridge). Every value has a comment in the file and a tooltip in the in-game screen.
 
 ## Releasing
 
