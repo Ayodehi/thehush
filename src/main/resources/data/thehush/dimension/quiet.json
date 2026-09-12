@@ -1,0 +1,16 @@
+{
+  "type": "thehush:quiet",
+  "generator": {
+    "type": "minecraft:flat",
+    "settings": {
+      "biome": "minecraft:deep_dark",
+      "features": false,
+      "lakes": false,
+      "layers": [
+        { "block": "minecraft:bedrock", "height": 1 },
+        { "block": "minecraft:deepslate", "height": 60 },
+        { "block": "minecraft:sculk", "height": 1 }
+      ]
+    }
+  }
+}

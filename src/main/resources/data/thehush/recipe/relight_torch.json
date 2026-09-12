@@ -1,0 +1,5 @@
+{
+  "type": "minecraft:crafting_shapeless",
+  "ingredients": [ "thehush:snuffed_torch", [ "minecraft:coal", "minecraft:charcoal" ] ],
+  "result": { "id": "minecraft:torch", "count": 1 }
+}

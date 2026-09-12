@@ -1,0 +1,6 @@
+{
+  "variants": {
+    "hanging=false": { "model": "thehush:block/dark_soul_lantern" },
+    "hanging=true": { "model": "thehush:block/dark_soul_lantern_hanging" }
+  }
+}

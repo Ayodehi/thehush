@@ -1,0 +1,1 @@
+{ "parent": "minecraft:block/template_lantern", "textures": { "lantern": "thehush:block/dark_soul_lantern" } }

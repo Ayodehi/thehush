@@ -1,0 +1,8 @@
+{
+  "variants": {
+    "facing=east": { "model": "thehush:block/snuffed_wall_torch" },
+    "facing=north": { "model": "thehush:block/snuffed_wall_torch", "y": 270 },
+    "facing=south": { "model": "thehush:block/snuffed_wall_torch", "y": 90 },
+    "facing=west": { "model": "thehush:block/snuffed_wall_torch", "y": 180 }
+  }
+}
